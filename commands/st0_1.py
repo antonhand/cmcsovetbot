@@ -7,7 +7,7 @@ def next(vk_id, body):
         return None, None
 
     vkapi.notify_admins("Сообщение Совету от пользователя @id" + str(vk_id))
-    return "Спасибо за ваше сообщение!\nМы обязательно с вами свяжемся", '0'
+    return "Спасибо за ваше сообщение!\nМы с вами свяжемся", '0'
 
 command_0 = command_system.Command(['0.1'])
 

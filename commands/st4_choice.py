@@ -28,7 +28,7 @@ def next(vk_id, body):
 
     db.make_choice(vk_id, candidates[choice][7])
 
-    msg = 'Вы выбрали кандидата:.\n'
+    msg = 'Вы выбрали кандидата:\n'
     msg += str(choice + 1) + '. ' + candidates[choice][0] + ' ' + candidates[choice][1] + ' ' + candidates[choice][2] + '\n\n'
 
     if len(candidates) > 1:

@@ -26,9 +26,13 @@ def processing():
 
     if data['type'] == 'confirmation':
         return settings.confirmation_token
-    elif data['type'] == 'message_new':
+
+
+    if data['type'] == 'message_new':
         try:
-            messageHandler.create_answer(data['object'], settings.token)
+            res = messageHandler.create_answer(data['object'], settings.token)
+            if res != "good":
+                vkapi.notify_admins(res)
             return 'ok'
         except Exception as e:
             vkapi.notify_admins('Бот упал...')

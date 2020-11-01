@@ -2,7 +2,9 @@ import mysql.connector
 import settings
 
 def connect():
-    return mysql.connector.connect(**settings.db_params)
+    return mysql.connector.connect(**settings.db_connect)
+
+########################################## ЗАПРОСЫ ПОЛЬЗОВАТЕЛЕЙ ##########################################
 
 def get_state(vk_id):
     conn = connect()
@@ -29,28 +31,67 @@ def set_state(vk_id, state):
     conn.commit()
     conn.close()
 
+def get_prev_user(vk_id):
+    conn = connect()
+    cursor = conn.cursor()
+
+    close_y_cond = ""
+
+    if settings.close_years:
+        close_y_cond = "and year not in " + str(settings.close_years)
+
+    cursor.execute("""select fullname, year, v.stud_num
+                      from
+                        (select stud_num from prev_users
+                         where vk_id = """  + str(vk_id) + """) pr
+                    	inner join
+                        voter v ON pr.stud_num = v.stud_num
+                        where v.voter_num is null
+                        """ + close_y_cond)
+    res = cursor.fetchall()
+    cursor.close()
+    if res:
+        studnum = res[0][2]
+        cursor = conn.cursor()
+        cursor.execute("update voter set vk_id = " + str(vk_id) + """,
+                        is_self_named = 0
+                        where stud_num = """ +  str(studnum))
+        cursor.close()
+        conn.commit()
+        conn.close()
+        return res[0]
+    else:
+        return res
+
 def get_simular_voter_by_fn(fullname, vk_id, insert = False, is_self_named = False):
     is_self_named = '1' if is_self_named else '0'
 
-    fullname = fullname.strip().upper().replace('Ё', 'Е')
+    fullname = fullname.strip().upper().replace('Ё', 'Е').replace("'", "").replace('"', '')
     conn = connect()
     cursor = conn.cursor()
+
+    close_y_cond = ""
+
+    if settings.close_years:
+        close_y_cond = "and year not in " + str(settings.close_years)
+
     cursor.execute("""select distinct fullname from voter
                         where replace(upper(fullname), 'Ё', 'Е') like '""" + fullname +'''%'
                         and voter_num is null
-                        and year not in ''' + str(settings.close_years) + '''
+                        ''' + close_y_cond + '''
                         order by fullname''')
     res = cursor.fetchall()
     cursor.close()
 
     if insert and res:
         cursor = conn.cursor()
+
         cursor.execute("""insert into user_voter_vars (vk_id, voter_id, is_self_named)
                           select """ + str(vk_id) + ", voter_id, " + is_self_named + """ from voter
                             where voter_id not in (select voter_id from user_voter_vars
                                                     where vk_id = """ + str(vk_id) + """)
                             and voter_num is null
-                            and year not in """ + str(settings.close_years) + """
+                            """ + close_y_cond + """
                             and replace(upper(fullname), 'Ё', 'Е') like '""" + fullname +"%'")
         cursor.close()
 
@@ -124,6 +165,8 @@ def attemts_count(vk_id):
 def check_studnum(vk_id, studnum):
     conn = connect()
     cursor = conn.cursor()
+
+
     cursor.execute("""select fullname, year, vk_id from voter
                         where voter_id in (select voter_id from user_voter_vars where vk_id = """ + str(vk_id) + """)
                         and voter_num is null
@@ -158,10 +201,16 @@ def check_studnum(vk_id, studnum):
 def get_candidates(vk_id):
     conn = connect()
     cursor = conn.cursor()
+
+    year = "(select year from voter where vk_id = " + str(vk_id) + ")"
+    if settings.is_test:
+        year = "7"
+
     cursor.execute("""select surname, name, COALESCE(midname, ''), description, vk_id, program, COALESCE(video, ''), t1.cand_id, COALESCE(t2.cand_id, 0) as is_vote
                         from (select * from candidate
-                                where year = (select year from voter where vk_id = """ + str(vk_id) + """
-                                and surname <> 'Против')) t1
+                                where year = """ + year + """
+                                and surname <> 'Против'
+                             ) t1
                         left join (select * from vote
                         			where voter_id = (select voter_id from voter where vk_id = """ + str(vk_id) + """)) t2 on t1.cand_id = t2.cand_id
                         order by surname, name, midname""")
@@ -201,14 +250,17 @@ def vote_against(vk_id):
 
     cursor = conn.cursor()
 
+    year = "(select year from voter where vk_id = " + str(vk_id) + ")"
+    if settings.is_test:
+        year = "7"
+
     cursor.execute("""insert into vote (voter_id, cand_id, is_confirm, conf_date)
                         values
                         ( (select voter_id from voter
                             where vk_id = """ + str(vk_id) + """)
                          ,(select cand_id from candidate
                              where surname = 'Против'
-                             and year = (select year from voter
-                                          where vk_id = """ + str(vk_id) + """))
+                             and year = """ + year + """)
                          , 1, current_timestamp)""")
 
     cursor.close()
@@ -217,13 +269,18 @@ def vote_against(vk_id):
 
 def add_voter_num(vk_id):
     conn = connect()
+    conn.start_transaction(consistent_snapshot=False,
+                      isolation_level='SERIALIZABLE',
+                      readonly=False)
     cursor = conn.cursor()
 
     cursor.execute("""update voter
-                        set voter_num = (select coalesce(max(t1.voter_num) + 1, t1.year * 1000 + 501) from (select * from voter) t1
-                                          where t1.year = (select t2.year from (select * from voter) t2
-                                                           where t2.vk_id = """ + str(vk_id) + """))
-                        where vk_id = """ + str(vk_id))
+                        join (select coalesce(max(t1.voter_num) + 1, t1.year * 1000 + 501) num
+                                from voter t1
+                                where t1.year = (select t2.year from voter t2
+                                                    where t2.vk_id = """ + str(vk_id) + """)) t
+                        set voter.voter_num = t.num
+                        where voter.vk_id = """ + str(vk_id))
 
     cursor.close()
     conn.commit()
@@ -260,8 +317,41 @@ def confirm_votes(vk_id):
     conn.commit()
     conn.close()
 
+'''
+def is_proccessed(vk_id, msg_id):
+    conn = connect()
 
-########################################## ADMIN QUERIES ##########################################
+    cursor = conn.cursor()
+
+    cursor.execute("""select msg_id
+                        from user_msgs
+                        where vk_id = """ + str(vk_id) + """
+                        and msg_id = """ + str(msg_id))
+
+    res = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    if res:
+        return True
+    else:
+        return False
+
+
+def add_proccessed(vk_id, msg_id):
+    conn = connect()
+
+    cursor = conn.cursor()
+
+    cursor.execute("""insert into user_msgs (vk_id, msg_id)
+                        values
+                        (""" + str(vk_id) + "," + str(msg_id) + ")")
+
+    cursor.close()
+    conn.commit()
+    conn.close()'''
+
+########################################## ЗАПРОСЫ АДМИНИСТРАТОРОВ ##########################################
 
 def get_stat():
     conn = connect()
@@ -399,7 +489,7 @@ def get_results():
 
     cursor.execute("""select v.voter_num,  coalesce(concat(cn.surname, ' ', cn.name, ' ', coalesce(cn.midname, '')), 'Воздержался'), v.year
                         from voter v left join vote vt
-                        on v.voter_id = vt.voter_id
+                        on v.voter_id = vt.voter_id and vt.is_confirm = 1
                         left join candidate cn on vt.cand_id = cn.cand_id
                         where voter_num is not null
                         and voter_num > -1""")
@@ -415,17 +505,62 @@ def get_not_finalized_voters():
     conn = connect()
     cursor = conn.cursor()
 
-    cursor.execute("""select voter_num,  vk_id
+    cursor.execute("""select vk_id
                         from voter
-                        where voter_num is not null
-                        and voter_num > -1
-                        and voter_id not in (select distinct voter_id
+                        where voter_id in (select distinct voter_id
                                                 from vote
-                                                where is_confirm is not null)""")
+                                                where is_confirm = 0)""")
+
+    res = cursor.fetchall()
+
+    res = list(map(lambda x: x[0], res))
+
+    cursor.close()
+    conn.close()
+
+    return res
+
+def select(query):
+    conn = connect()
+    cursor = conn.cursor()
+
+    cursor.execute(query)
 
     res = cursor.fetchall()
 
     cursor.close()
+    conn.close()
+
+    return res
+
+def get_prev_novote_users(year):
+    conn = connect()
+    cursor = conn.cursor()
+    cursor.execute("""select pr.vk_id
+                        from prev_users pr
+                        inner join voter v
+                        	on pr.stud_num = v.stud_num
+                        	and v.voter_num is null
+                        where pr.vk_id not in (select vk_id from user_state)
+                        and v.year = """ + str(year))
+    res = cursor.fetchall()
+    cursor.close()
+
+    res = list(map(lambda x: x[0], res))
+
+    cursor = conn.cursor()
+
+    cursor.execute("""insert into user_state
+                        select pr.vk_id, '0', 0
+                        from prev_users pr
+                        inner join voter v
+                        	on pr.stud_num = v.stud_num
+                        	and v.voter_num is null
+                        where pr.vk_id not in (select vk_id from user_state)
+                        and v.year = """ + str(year))
+
+    cursor.close()
+    conn.commit()
     conn.close()
 
     return res

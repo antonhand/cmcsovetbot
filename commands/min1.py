@@ -9,9 +9,12 @@ def next(vk_id, body):
 
     name = vkapi.get_profile(vk_id)["first_name"]
     msg = 'Здравствуйте, ' + name + '!\n\n'
-    years = set(settings.enable_years) - set(settings.close_years)
-    msg += 'Если вы студент ВМК ' + ", ".join(map(str, years)) + ' курса, вы можете проголосовать на выборах в Студенческий совет ВМК.\n\n'
-    msg += 'Голосование для 2 курса магистратуры, к сожалению, недоступно, т.к. на курсе не зарегистрировался ни один кандидат.\n\n'
+
+    if settings.close_years:
+        years = set(settings.enable_years) - set(settings.close_years)
+        msg += 'Если вы студент ВМК ' + ", ".join(map(str, years)) + ' курса, вы можете проголосовать на выборах в Студенческий совет ВМК.\n\n'
+    else:
+        msg += 'Если вы студент ВМК, вы можете проголосовать на выборах в Студенческий совет ВМК.\n\n'
 
     if settings.close_years:
         msg += 'Голосование на ' + ", ".join(map(str, settings.close_years)) + ' курсах завершено.\n\n'

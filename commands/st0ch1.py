@@ -7,12 +7,28 @@ def next(vk_id, body):
     if body not in keys:
         return None, None
 
+    prev_user = db.get_prev_user(vk_id)
+
+    if prev_user:
+        msg = 'Ваши данные\n'
+        msg += 'ФИО: ' + prev_user[0] + '\n'
+        msg += 'Курс: ' + str(prev_user[1]) + '\n\n'
+
+        msg += 'Всё верно?\n\n'
+        msg += 'Отправьте 1, если да, отправьте 2, если нет.'
+
+        return msg, '3'
+
+
     prof = vkapi.get_profile(vk_id)
     name = prof["first_name"]
     surname = prof["last_name"]
     vari = db.get_simular_voter(name, surname, vk_id, insert=True)
     msg = ''
     new_state = '1'
+
+
+
     if vari:
         msg = 'Для голосования необходимо представиться. Возможно, вы кто-то из перечисленных людей?\n\n'
         for num, keys in enumerate(vari):

@@ -51,7 +51,7 @@ def next(vk_id, body):
     if not_choosen == []:
         return st4_1ch0.next(vk_id, '0')
 
-    msg = 'Вы выбрали кандидатов:.\n'
+    msg = 'Вы выбрали кандидатов:\n'
 
     for cand in choosen:
         msg += cand + '\n'

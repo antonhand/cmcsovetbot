@@ -1,5 +1,6 @@
 command_list = {}
 adm_com_list = []
+cand_com_list = []
 
 class Command:
    def __init__(self, states):
@@ -16,6 +17,14 @@ class AdmCommand:
    def __init__(self):
         self.description = ''
         adm_com_list.append(self)
+
+   def process(self, in_msg = ""):
+       pass
+
+class CandCommand:
+   def __init__(self):
+        self.description = ''
+        cand_com_list.append(self)
 
    def process(self, in_msg = ""):
        pass

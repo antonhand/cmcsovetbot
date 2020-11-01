@@ -5,37 +5,35 @@ import db
 from datetime import date
 
 session = vk.Session()
-api = vk.API(session, v=5.87)
+api = vk.API(session, v=settings.vk_api_ver)
 
 
-def send_message(user_id, message, keyboard="", attachment=""):
+def send_message(user_id, message, keyboard="", attachment="", random_id=0):
     if keyboard == "":
-        api.messages.send(access_token=settings.token, user_id=str(user_id), message=message, attachment=attachment, dont_parse_links=1)
+        api.messages.send(access_token=settings.token, user_id=str(user_id), message=message, attachment=attachment, dont_parse_links=settings.dont_parse_links)
     else:
-        api.messages.send(access_token=settings.token, user_id=str(user_id), message=message, keyboard=keyboard, attachment=attachment, dont_parse_links=1)
+        api.messages.send(access_token=settings.token, user_id=str(user_id), message=message, keyboard=keyboard, attachment=attachment, dont_parse_links=settings.dont_parse_links)
 
 def send_message_to_users(users,  message, keyboard="", attachment=""):
-    for i in range(0, (len(users) - 1)//100 + 1):
-        usrs = users[i * 100:min(len(users), (i + 1) * 100)]
+
+    PACK_SIZE = 40
+
+    for i in range(0, (len(users) - 1)//PACK_SIZE + 1):
+        usrs = users[i * PACK_SIZE:min(len(users), (i + 1) * PACK_SIZE)]
         if keyboard == "":
-            api.messages.send(access_token=settings.token, user_ids=usrs, message=message, attachment=attachment, dont_parse_links=1)
+            api.messages.send(access_token=settings.token, user_ids=usrs, random_id=0, message=message, attachment=attachment, dont_parse_links=settings.dont_parse_links)
         else:
-            api.messages.send(access_token=settings.token, user_ids=usrs, message=message, keyboard=keyboard, attachment=attachment, dont_parse_links=1)
+            api.messages.send(access_token=settings.token, user_ids=usrs, random_id=0, message=message, keyboard=keyboard, attachment=attachment, dont_parse_links=settings.dont_parse_links)
 
 
 def get_profile(user_id):
-    get_param = {}
-    get_param["user_ids"] = user_id
-    get_param["access_token"] = settings.token
-    get_param["v"] = "5.87"
+    res = api.users.get(user_ids=user_id, access_token=settings.token)
 
-    response = requests.get('https://api.vk.com/method/users.get', params = get_param).json()
-
-    return response["response"][0]
+    return res[0]
 
 def notify_admins(message):
     for user_id in settings.admin_ids:
-        api.messages.send(access_token=settings.token, user_id=str(user_id), message=message)
+        api.messages.send(access_token=settings.token, user_id=str(user_id), random_id=0, message=message)
 
 
 def get_potential_users():
@@ -83,3 +81,8 @@ def upload_to_msg(vk_id, file):
 
 
     return "doc" +  str(res["owner_id"]) + "_" + str(res["id"])
+
+def get_last_msg(vk_id):
+    res = api.messages.getHistory(access_token=settings.token, count = 1, user_id = vk_id)
+    res = res["items"][0]
+    return res
